@@ -54,6 +54,9 @@ if __name__ == "__main__":
 					line = source
 				else:
 					line += ' ' + source
+			if line != '':
+				N: int = (71 - len(line)) // 4
+				lines.append('\t' + line + ('\t' * N) + '\t\\')
 			output_file.write('FILES\t=' + ('\t' * 17) + '\\\n')
 			for line in lines:
 				output_file.write(line + '\n')
