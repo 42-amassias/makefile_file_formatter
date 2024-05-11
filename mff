@@ -1,4 +1,55 @@
 #!/usr/bin/python3
 
+import sys
+import os
+from typing import List, Tuple
+
+DEFAULT_SRC_FOLDER = "src"
+
+def	query_source_folder() -> str:
+	L: int = len(sys.argv)
+	if L > 2:
+		print("Too many arguments !", file=sys.stderr)
+		return (None)
+	if L == 1:
+		return (DEFAULT_SRC_FOLDER)
+	folder: str = sys.argv[1]
+	while len(folder) > 1 and folder.endswith('/'):
+		folder = folder[:-1]
+	return (folder)
+
+def	query_files_in_folder(root_folder: str) -> List[str]:
+	sources: List[str] = []
+	for path, _, files in os.walk(root_folder):
+		for file in files:
+			if not file.endswith(".c"):
+				continue
+			sources.append(path + "/" + file[:-2])
+	return (sources)
+
 if __name__ == "__main__":
-	print("Hello world")
+	could_open: bool = False
+	src_folder: str = query_source_folder()
+	if src_folder == None:
+		exit(1)
+	try:
+		with open('Files.mk', 'w') as (output_file, error):
+			line: str = ''
+			lines: List[str] = []
+			could_open = True
+			for source in query_files_in_folder(src_folder):
+				L: int = len(line)
+				if L == 0:
+					line = source
+				elif L + len(source) + 1 > 71:
+					N: int = (71 - L) // 4
+					lines.append('\t' + line + ('\t' * N) + '\t\\')
+					line = source
+				else:
+					line += ' ' + source
+			output_file.write('FILES\t=' + ('\t' * 17) + '\\\n')
+			for line in lines:
+				output_file.write(line + '\n')
+	except IOError as error:
+		print("IOError:", error, file=sys.stderr)
+	exit(0 if could_open else 1)
