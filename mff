@@ -28,10 +28,8 @@ def	query_files_in_folder(root_folder: str) -> List[str]:
 		if path:
 			path += '/'
 		for file in files:
-			if not file.endswith(".c"):
-				continue
-			print(path, file)
-			sources.append(path + file[:-2])
+			if file.endswith(".c"):
+				sources.append(path + file[:-2])
 	return (sources)
 
 if __name__ == "__main__":
