@@ -33,7 +33,7 @@ if __name__ == "__main__":
 	if src_folder == None:
 		exit(1)
 	try:
-		with open('Files.mk', 'w') as (output_file, error):
+		with open('Files.mk', 'w') as output_file:
 			line: str = ''
 			lines: List[str] = []
 			could_open = True
