@@ -20,11 +20,18 @@ def	query_source_folder() -> str:
 
 def	query_files_in_folder(root_folder: str) -> List[str]:
 	sources: List[str] = []
+	ROOT_FOLDER_LENGTH = len(root_folder)
 	for path, _, files in os.walk(root_folder):
+		path = path[ROOT_FOLDER_LENGTH:]
+		if path.startswith('/'):
+			path = path[1:]
+		if path:
+			path += '/'
 		for file in files:
 			if not file.endswith(".c"):
 				continue
-			sources.append(path + "/" + file[:-2])
+			print(path, file)
+			sources.append(path + file[:-2])
 	return (sources)
 
 if __name__ == "__main__":
