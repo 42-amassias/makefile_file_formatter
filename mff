@@ -7,18 +7,6 @@ from typing import List, Tuple
 SRC_FOLDER	=	"src"
 EXTENSION	=	"c"
 
-def	query_source_folder() -> str:
-	L: int = len(sys.argv)
-	if L > 2:
-		print("Too many arguments !", file=sys.stderr)
-		return (None)
-	if L == 1:
-		return (DEFAULT_SRC_FOLDER)
-	folder: str = sys.argv[1]
-	while len(folder) > 1 and folder.endswith('/'):
-		folder = folder[:-1]
-	return (folder)
-
 def	query_files_in_folder(root_folder: str) -> List[str]:
 	sources: List[str] = []
 	ROOT_FOLDER_LENGTH = len(root_folder)
@@ -30,7 +18,7 @@ def	query_files_in_folder(root_folder: str) -> List[str]:
 			path += '/'
 		for file in files:
 			if file.endswith('.' + EXTENSION):
-				sources.append(path + file[:-len(EXTENSION)])
+				sources.append(path + file[:-len('.' + EXTENSION)])
 	return (sources)
 
 if __name__ == "__main__":
@@ -48,7 +36,7 @@ if __name__ == "__main__":
 			line: str = ''
 			lines: List[str] = []
 			could_open = True
-			for source in SRC_FOLDER:
+			for source in query_files_in_folder(SRC_FOLDER):
 				L: int = len(line)
 				if L == 0:
 					line = source
