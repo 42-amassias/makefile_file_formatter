@@ -4,7 +4,8 @@ import sys
 import os
 from typing import List, Tuple
 
-DEFAULT_SRC_FOLDER = "src"
+SRC_FOLDER	=	"src"
+EXTENSION	=	"c"
 
 def	query_source_folder() -> str:
 	L: int = len(sys.argv)
@@ -28,21 +29,26 @@ def	query_files_in_folder(root_folder: str) -> List[str]:
 		if path:
 			path += '/'
 		for file in files:
-			if file.endswith(".c"):
-				sources.append(path + file[:-2])
+			if file.endswith('.' + EXTENSION):
+				sources.append(path + file[:-len(EXTENSION)])
 	return (sources)
 
 if __name__ == "__main__":
 	could_open: bool = False
-	src_folder: str = query_source_folder()
-	if src_folder == None:
-		exit(1)
+	for arg in sys.argv[1:]:
+		if arg.startswith('--type=') or arg.startswith('-t='):
+			EXTENSION = arg.split('=', 1)[1]
+		elif arg.startswith('--root=') or arg.startswith('-r='):
+			SRC_FOLDER = arg.split('=', 1)[1]
+		else:
+			print('Unknown augument:', arg, file=sys.stderr)
+			exit(1)
 	try:
 		with open('Files.mk', 'w') as output_file:
 			line: str = ''
 			lines: List[str] = []
 			could_open = True
-			for source in query_files_in_folder(src_folder):
+			for source in SRC_FOLDER:
 				L: int = len(line)
 				if L == 0:
 					line = source
