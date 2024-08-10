@@ -107,7 +107,7 @@ def main():
 				N: int = compute_line_tab_count(max_cols, tab_size, line)
 				lines.append('\t' + line + ('\t' * N) + '\t\\')
 
-			for source in query_files_in_folder(src_folder, extension):
+			for source in sorted(query_files_in_folder(src_folder, extension)):
 				L: int = len(line)
 				if L == 0:
 					line = source
@@ -116,8 +116,10 @@ def main():
 					line = source
 				else:
 					line += ' ' + source
+
 			if line != '':
 				format_line(line)
+
 			print_header(max_cols, tab_size, var_name, output_file)
 			[output_file.write(line + '\n') for line in lines]
 	except IOError as error:
