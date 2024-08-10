@@ -4,10 +4,68 @@ import sys
 import os
 from typing import List, Tuple
 
-SRC_FOLDER	=	"src"
-EXTENSION	=	"c"
+DEFAULT_SRC_FOLDER	=	'src'
+DEFAULT_EXTENSION	=	'c'
+DEFAULT_OUT_FILE	=	'Files.mk'
+DEFAULT_MAX_COLS	=	80
+DEFAULT_TAB_SIZE	=	4
+DEFAULT_VAR_NAME	=	'FILES'
 
-def	query_files_in_folder(root_folder: str) -> List[str]:
+def test_out_file(new_out_file: str):
+	try:
+		f = open(new_out_file, 'w')
+	except Exception as e:
+		print(f"{sys.argv[0]}: cannot open output file '{new_out_file}': {e.strerror}", file=sys.stderr)
+		exit(1)
+	else:
+		f.close()
+
+def parse_args() -> Tuple[str, str, str]:
+	src_folder	=	DEFAULT_SRC_FOLDER
+	extension	=	DEFAULT_EXTENSION
+	out_file	=	DEFAULT_OUT_FILE
+	max_cols	=	DEFAULT_MAX_COLS
+	tab_size	=	DEFAULT_TAB_SIZE
+	var_name	=	DEFAULT_VAR_NAME
+
+	for arg in sys.argv[1:]:
+		if arg.startswith('--type=') or arg.startswith('-t='):
+			extension = arg.split('=', 1)[1]
+
+		elif arg.startswith('--root=') or arg.startswith('-r='):
+			src_folder = arg.split('=', 1)[1]
+
+		elif arg.startswith('--cols=') or arg.startswith('-c='):
+			[arg, max_cols] = arg.split('=', 1)
+			if not max_cols.isnumeric():
+				print(f"'{arg}': '{max_cols}': numeric value expected", file=sys.stderr)
+				exit(1)
+			max_cols = int(max_cols)
+
+		elif arg.startswith('--tab-size=') or arg.startswith('-s='):
+			[arg, tab_size] = arg.split('=', 1)
+			if not tab_size.isnumeric():
+				print(f"'{arg}': '{tab_size}': numeric value expected", file=sys.stderr)
+				exit(1)
+			tab_size = int(tab_size)
+
+		elif arg.startswith('--var-name=') or arg.startswith('-v='):
+			[arg, var_name] = arg.split('=', 1)
+			if not var_name or not all(l.isalpha() or l == '_' for l in var_name):
+				print(f"'{arg}': '{var_name}': var name should match `[a-zA-Z_]+`", file=sys.stderr)
+				exit(1)
+
+		elif arg.startswith('-o='):
+			out_file = arg.split('=', 1)[1]
+			test_out_file(out_file)
+
+		else:
+			print('Unknown augument:', arg, file=sys.stderr)
+			exit(1)
+
+	return (src_folder, extension, out_file, max_cols, tab_size, var_name)
+
+def	query_files_in_folder(root_folder: str, extension: str) -> List[str]:
 	sources: List[str] = []
 	ROOT_FOLDER_LENGTH = len(root_folder)
 	for path, _, files in os.walk(root_folder):
@@ -17,41 +75,54 @@ def	query_files_in_folder(root_folder: str) -> List[str]:
 		if path:
 			path += '/'
 		for file in files:
-			if file.endswith('.' + EXTENSION):
-				sources.append(path + file[:-len('.' + EXTENSION)])
+			if file.endswith('.' + extension):
+				sources.append(path + file[:-len('.' + extension)])
 	return (sources)
 
-if __name__ == "__main__":
+def print_header(max_cols, tab_size, var_name, file) -> None:
+	REAMINING_SPACE = (max_cols - max_cols % tab_size)
+	REAMINING_SPACE -= len(var_name)
+	REAMINING_SPACE -= tab_size - (len(var_name) % tab_size)
+	REAMINING_SPACE -= len('=')
+	TAB_COUNT = REAMINING_SPACE // tab_size
+	file.write(f'{var_name}\t=' + ('\t' * TAB_COUNT) + '\\\n')
+
+def compute_line_tab_count(max_cols, tab_size, line):
+	REAMINING_SPACE = (max_cols - max_cols % tab_size) - 2 * tab_size - 1
+	REAMINING_SPACE -= len(line)
+	TAB_COUNT = REAMINING_SPACE // tab_size
+	return (TAB_COUNT)
+
+def main():
 	could_open: bool = False
-	for arg in sys.argv[1:]:
-		if arg.startswith('--type=') or arg.startswith('-t='):
-			EXTENSION = arg.split('=', 1)[1]
-		elif arg.startswith('--root=') or arg.startswith('-r='):
-			SRC_FOLDER = arg.split('=', 1)[1]
-		else:
-			print('Unknown augument:', arg, file=sys.stderr)
-			exit(1)
+	(src_folder, extension, out_file, max_cols, tab_size, var_name) = parse_args()
 	try:
-		with open('Files.mk', 'w') as output_file:
+		MAX_SPACE = max_cols - 2 * tab_size - 1
+		with open(out_file, 'w') as output_file:
 			line: str = ''
 			lines: List[str] = []
 			could_open = True
-			for source in query_files_in_folder(SRC_FOLDER):
+
+			def format_line(line):
+				N: int = compute_line_tab_count(max_cols, tab_size, line)
+				lines.append('\t' + line + ('\t' * N) + '\t\\')
+
+			for source in query_files_in_folder(src_folder, extension):
 				L: int = len(line)
 				if L == 0:
 					line = source
-				elif L + len(source) + 1 > 71:
-					N: int = (71 - L) // 4
-					lines.append('\t' + line + ('\t' * N) + '\t\\')
+				elif L + len(source) + 1 > MAX_SPACE:
+					format_line(line)
 					line = source
 				else:
 					line += ' ' + source
 			if line != '':
-				N: int = (71 - len(line)) // 4
-				lines.append('\t' + line + ('\t' * N) + '\t\\')
-			output_file.write('FILES\t=' + ('\t' * 17) + '\\\n')
-			for line in lines:
-				output_file.write(line + '\n')
+				format_line(line)
+			print_header(max_cols, tab_size, var_name, output_file)
+			[output_file.write(line + '\n') for line in lines]
 	except IOError as error:
-		print("IOError:", error, file=sys.stderr)
+		print('IOError:', error, file=sys.stderr)
 	exit(0 if could_open else 1)
+
+if __name__ == '__main__':
+	main()
