@@ -3,6 +3,7 @@
 import sys
 import os
 from typing import List, Tuple
+from enum import Enum
 
 DEFAULT_SRC_FOLDER	=	'src'
 DEFAULT_EXTENSION	=	'c'
@@ -11,103 +12,248 @@ DEFAULT_MAX_COLS	=	80
 DEFAULT_TAB_SIZE	=	4
 DEFAULT_VAR_NAME	=	'FILES'
 
-def test_out_file(new_out_file: str):
-	try:
-		f = open(new_out_file, 'w')
-	except Exception as e:
-		print(f"{sys.argv[0]}: cannot open output file '{new_out_file}': {e.strerror}", file=sys.stderr)
-		exit(1)
-	else:
-		f.close()
+DESC_MFF		=	'Compiles every file in your project into a formatted Makefile file.'
 
-def parse_args() -> Tuple[str, str, str]:
-	src_folder	=	DEFAULT_SRC_FOLDER
-	extension	=	DEFAULT_EXTENSION
-	out_file	=	DEFAULT_OUT_FILE
-	max_cols	=	DEFAULT_MAX_COLS
-	tab_size	=	DEFAULT_TAB_SIZE
-	var_name	=	DEFAULT_VAR_NAME
+DESC_COLS		=	'the number of columns in the output file.'
+DESC_OUTPUT		=	'the path to the output file.'
+DESC_ROOT		=	'the folder from which to start the search of the source files.'
+DESC_TAB_SIZE	=	'the size of a tab.'
+DESC_TYPE		=	'the extention of the source files.'
+DESC_VAR_NAME	=	'the makefile variable name.'
+DESC_HELP		=	'this help.'
 
-	for arg in sys.argv[1:]:
-		if arg.startswith('--type=') or arg.startswith('-t='):
-			extension = arg.split('=', 1)[1]
+class Argument:
+	def	__init__(self,							\
+			has_parameters: bool,				\
+			short_name: str, long_name: str,	\
+			description: str,					\
+			default_value,						\
+			action								\
+			):
+		self.__has_parameters = has_parameters
+		self.__short = short_name
+		self.__long = long_name
+		self.__desc = description
+		self.__value = default_value
+		self.__action = action
 
-		elif arg.startswith('--root=') or arg.startswith('-r='):
-			src_folder = arg.split('=', 1)[1]
+	def	parse(self, to_parse) -> bool:
+		arg = self.__is_short_recognized(to_parse)
+		if arg == None:
+			arg = self.__is_long_recognized(to_parse)
+		if arg == None:
+			return (False)
+		if self.__has_parameters and not arg:
+			raise ValueError('Missing argument')
+		self.__value = self.__action(arg) if self.__has_parameters else self.__action()
+		return (True)
 
-		elif arg.startswith('--cols=') or arg.startswith('-c='):
-			[arg, max_cols] = arg.split('=', 1)
-			if not max_cols.isnumeric():
-				print(f"'{arg}': '{max_cols}': numeric value expected", file=sys.stderr)
+	def	get_value(self):
+		return (self.__value)
+	
+	def	get_long_name(self) -> str:
+		return (self.__long)
+	
+	def	get_short_name(self) -> str:
+		return (self.__short)
+	
+	def	get_desc(self) -> str:
+		return (self.__desc)
+
+	def	__is_short_recognized(self, to_parse: str) -> str|None:
+		if not to_parse.startswith('-'):
+			return (None)
+		tokens = to_parse[1:].split('=', 1)
+		if tokens[0] != self.__short:
+			return (None)
+		if len(tokens) == 1:
+			return ('')
+		return (tokens[1])
+
+	def	__is_long_recognized(self, to_parse: str) -> str|None:
+		if not to_parse.startswith('--'):
+			return (None)
+		tokens = to_parse[2:].split('=', 1)
+		if tokens[0] != self.__long:
+			return (None)
+		if len(tokens) == 1:
+			return ('')
+		return (tokens[1])
+
+class Settings:
+	__ARG_IDX = Enum('__ARG_IDX', [
+		'COLS',
+		'OUTPUT',
+		'ROOT',
+		'TAB',
+		'TYPE',
+		'VAR',
+	])
+
+	def	__init__(self):
+		self.__arguments = [
+			Argument(True, 'c', 'cols', DESC_COLS, DEFAULT_MAX_COLS, self.__parse_max_col_count),
+			Argument(True, 'o', 'output', DESC_OUTPUT, DEFAULT_OUT_FILE, self.__parse_output_file),
+			Argument(True, 'r', 'root', DESC_ROOT, DEFAULT_SRC_FOLDER, self.__parse_root_directory),
+			Argument(True, 's', 'tab-size', DESC_TAB_SIZE, DEFAULT_TAB_SIZE, self.__parse_tab_size),
+			Argument(True, 't', 'type', DESC_TYPE, DEFAULT_EXTENSION, self.__parse_extension),
+			Argument(True, 'v', 'var-name', DESC_VAR_NAME, DEFAULT_VAR_NAME, self.__parse_var_name),
+			Argument(False, 'h', 'help', DESC_HELP, None, self.__print_help),
+		]
+
+	def	parse_options(self, options: List[str]):
+		def	__parse_option(arguments, option):
+			for arg in arguments:
+				if arg.parse(option):
+					return
+			raise ValueError('Unknown option')
+
+		for option in options:
+			try:
+				__parse_option(self.__arguments, option)
+			except Exception as e:
+				print('mff', option.split('=', 1)[0], e.args[0], sep=': ', file=sys.stderr)
+				self.print_usage(file=sys.stderr)
+				print('Try \'mff --help\' for more information.', file=sys.stderr)
 				exit(1)
-			max_cols = int(max_cols)
 
-		elif arg.startswith('--tab-size=') or arg.startswith('-s='):
-			[arg, tab_size] = arg.split('=', 1)
-			if not tab_size.isnumeric():
-				print(f"'{arg}': '{tab_size}': numeric value expected", file=sys.stderr)
-				exit(1)
-			tab_size = int(tab_size)
+	def	print_usage(self, file=sys.stdout):
+		print('Usage: mff [OPTION]...', file=file)
 
-		elif arg.startswith('--var-name=') or arg.startswith('-v='):
-			[arg, var_name] = arg.split('=', 1)
-			if not var_name or not all(l.isalpha() or l == '_' for l in var_name):
-				print(f"'{arg}': '{var_name}': var name should match `[a-zA-Z_]+`", file=sys.stderr)
-				exit(1)
+	def	__parse_extension(self, extension: str) -> str:
+		if not extension:
+			raise ValueError('extension must not be empty')
+		return (extension)
 
-		elif arg.startswith('-o='):
-			out_file = arg.split('=', 1)[1]
-			test_out_file(out_file)
+	def	__parse_root_directory(self, root_directory: str) -> str:
+		if not root_directory:
+			raise ValueError('root directory must not be empty')
+		return (root_directory)
 
-		else:
-			print('Unknown augument:', arg, file=sys.stderr)
+	def	__parse_max_col_count(self, max_col_count: str) -> int:
+		if not max_cols_count.isnumeric():
+			raise ValueError('a numeric value is expected for the column count')
+		max_cols_count = int(max_cols_count)
+		if max_col_count == 0:
+			raise ValueError('column count must not be zero')
+		if max_col_count < 0:
+			# Unreachable
+			raise ValueError('column count must be positive')
+		return (max_col_count)
+
+	def	__parse_tab_size(self, tab_size: str) -> int:
+		if not tab_size.isnumeric():
+			raise ValueError('a numeric value is expected for the tab size')
+		tab_size = int(tab_size)
+		if tab_size == 0:
+			raise ValueError('tab size must not be zero')
+		if tab_size < 0:
+			raise ValueError('tab size must be positive')
+		return (tab_size)
+
+	def	__parse_var_name(self, var_name: str) -> str:
+		if not var_name:
+			raise ValueError('var name must not be empty')
+		if not all(l.isalpha() or l == '_' for l in var_name):
+			raise ValueError('var name should match `[a-zA-Z_]+')
+		return (var_name)
+
+	def	__parse_output_file(self, output_file: str) -> str:
+		if not output_file:
+			raise ValueError('output file name must not be empty')
+		return (output_file)
+
+	def	__print_help_header(self):
+		self.print_usage()
+		print()
+		print(DESC_MFF)
+
+	def	__print_help_arguments(self):
+		m = max([len(arg.get_long_name()) for arg in self.__arguments])
+		spacer = ' ' * (((m % 4) - 1) % 4 + 1)
+		fmt = f'  -{{s}}, {{l:<{m}}}{spacer}{{d}}'
+		print('Arguments:')
+		for arg in self.__arguments:
+			print(fmt.format(s=arg.get_short_name(), l=arg.get_long_name(), d=arg.get_desc()))
+
+	def	__print_help(self) -> str:
+		self.__print_help_header()
+		print()
+		self.__print_help_arguments()
+		exit(0)
+
+	def	test_output_file(self) -> None:
+		try:
+			f = open(self.get_output_file(), 'w')
+		except Exception as e:
+			print('mff', self.get_output_file(), e.strerror, sep=': ', file=sys.stderr)
 			exit(1)
+		else:
+			f.close()
 
-	return (src_folder, extension, out_file, max_cols, tab_size, var_name)
+	def	get_root_directory(self) -> str:
+		return (self.__arguments[self.__ARG_IDX.ROOT.value - 1].get_value())
 
-def	query_files_in_folder(root_folder: str, extension: str) -> List[str]:
+	def	get_extension(self) -> str:
+		return (self.__arguments[self.__ARG_IDX.TYPE.value - 1].get_value())
+
+	def	get_output_file(self) -> str:
+		return (self.__arguments[self.__ARG_IDX.OUTPUT.value - 1].get_value())
+
+	def	get_max_col_count(self) -> int:
+		return (self.__arguments[self.__ARG_IDX.COLS.value - 1].get_value())
+
+	def	get_tab_size(self) -> int:
+		return (self.__arguments[self.__ARG_IDX.TAB.value - 1].get_value())
+
+	def	get_var_name(self) -> str:
+		return (self.__arguments[self.__ARG_IDX.VAR.value - 1].get_value())
+
+def	query_files_in_folder(settings: Settings) -> List[str]:
 	sources: List[str] = []
-	ROOT_FOLDER_LENGTH = len(root_folder)
-	for path, _, files in os.walk(root_folder):
+	ROOT_FOLDER_LENGTH = len(settings.get_root_directory())
+	for path, _, files in os.walk(settings.get_root_directory()):
 		path = path[ROOT_FOLDER_LENGTH:]
 		if path.startswith('/'):
 			path = path[1:]
 		if path:
 			path += '/'
 		for file in files:
-			if file.endswith('.' + extension):
-				sources.append(path + file[:-len('.' + extension)])
+			if file.endswith('.' + settings.get_extension()):
+				sources.append(path + file[:-len('.' + settings.get_extension())])
 	return (sources)
 
-def print_header(max_cols, tab_size, var_name, file) -> None:
-	REAMINING_SPACE = (max_cols - max_cols % tab_size)
-	REAMINING_SPACE -= len(var_name)
-	REAMINING_SPACE -= tab_size - (len(var_name) % tab_size)
+def print_header(settings: Settings, file) -> None:
+	REAMINING_SPACE = (settings.get_max_col_count() - settings.get_max_col_count() % settings.get_tab_size())
+	REAMINING_SPACE -= len(settings.get_var_name())
+	REAMINING_SPACE -= settings.get_tab_size() - (len(settings.get_var_name()) % settings.get_tab_size())
 	REAMINING_SPACE -= len('=')
-	TAB_COUNT = REAMINING_SPACE // tab_size
-	file.write(f'{var_name}\t=' + ('\t' * TAB_COUNT) + '\\\n')
+	TAB_COUNT = REAMINING_SPACE // settings.get_tab_size()
+	file.write(f'{settings.get_var_name()}\t=' + ('\t' * TAB_COUNT) + '\\\n')
 
-def compute_line_tab_count(max_cols, tab_size, line):
-	REAMINING_SPACE = (max_cols - max_cols % tab_size) - 2 * tab_size - 1
+def compute_line_tab_count(settings: Settings, line: str) -> int:
+	REAMINING_SPACE = (settings.get_max_col_count() - settings.get_max_col_count() % settings.get_tab_size()) - 2 * settings.get_tab_size() - 1
 	REAMINING_SPACE -= len(line)
-	TAB_COUNT = REAMINING_SPACE // tab_size
+	TAB_COUNT = REAMINING_SPACE // settings.get_tab_size()
 	return (TAB_COUNT)
 
-def main():
+def main() -> None:
+	settings = Settings()
 	could_open: bool = False
-	(src_folder, extension, out_file, max_cols, tab_size, var_name) = parse_args()
+	settings.parse_options(sys.argv[1:])
+	settings.test_output_file()
 	try:
-		MAX_SPACE = max_cols - 2 * tab_size - 1
-		with open(out_file, 'w') as output_file:
+		MAX_SPACE = settings.get_max_col_count() - 2 * settings.get_tab_size() - 1
+		with open(settings.get_output_file(), 'w') as output_file:
 			line: str = ''
 			lines: List[str] = []
 			could_open = True
 
 			def format_line(line):
-				N: int = compute_line_tab_count(max_cols, tab_size, line)
+				N: int = compute_line_tab_count(settings, line)
 				lines.append('\t' + line + ('\t' * N) + '\t\\')
 
-			for source in sorted(query_files_in_folder(src_folder, extension)):
+			for source in sorted(query_files_in_folder(settings)):
 				L: int = len(line)
 				if L == 0:
 					line = source
@@ -120,7 +266,7 @@ def main():
 			if line != '':
 				format_line(line)
 
-			print_header(max_cols, tab_size, var_name, output_file)
+			print_header(settings, output_file)
 			[output_file.write(line + '\n') for line in lines]
 	except IOError as error:
 		print('IOError:', error, file=sys.stderr)
